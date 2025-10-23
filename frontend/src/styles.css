@@ -1,0 +1,9 @@
+.app { font-family: Arial, sans-serif; padding: 16px; }
+.controls { margin-bottom: 12px; }
+.layers { display: flex; gap: 12px; }
+.layer { border: 1px solid #ccc; padding: 8px; }
+.grid { display: grid; grid-template-columns: repeat(3, 40px); gap: 4px; }
+.cell { width: 40px; height: 40px; }
+.cell.occupied { background: #eee; }
+.cell.selected { outline: 2px solid blue; }
+.message { color: red; margin: 8px 0; }
