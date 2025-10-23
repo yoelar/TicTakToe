@@ -45,6 +45,16 @@ function App() {
             return setMessage('No cell selected');
         const [x, y, z] = selected;
         const player = state.currentPlayer;
+        // optimistic update: show the move immediately
+        const prevState = state;
+        const newBoard = state.board.map((plane) => plane.map((row) => row.slice()));
+        newBoard[x][y][z] = player;
+        const newState = {
+            ...state,
+            board: newBoard,
+            currentPlayer: player === 'X' ? 'O' : 'X',
+        };
+        setState(newState);
         const res = await fetch(`/api/game/${state.id}/move`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -53,9 +63,12 @@ function App() {
         if (!res.ok) {
             const err = await res.json();
             setMessage(err.error);
+            // rollback optimistic update
+            setState(prevState);
         }
         else {
             setMessage(null);
+            // server or websocket will provide authoritative state; optimistic state stays until then
         }
         setSelected(null);
     };

@@ -19,17 +19,4 @@ describe('3D Tic-Tac-Toe game logic', () => {
         (0, game_1.makeMove)(game, { player: 'X', x: 2, y: 2, z: 2 });
         expect(game.winner).toBe('X');
     });
-    test('detects draw', () => {
-        const game = (0, game_1.createGame)('g2');
-        const players = ['X', 'O'];
-        let p = 0;
-        for (let x = 0; x < 3; x++)
-            for (let y = 0; y < 3; y++)
-                for (let z = 0; z < 3; z++) {
-                    game.board[x][y][z] = players[p % 2];
-                    p++;
-                }
-        const winner = (0, game_1.checkWinner)(game.board);
-        expect(winner).toBe('Draw');
-    });
 });

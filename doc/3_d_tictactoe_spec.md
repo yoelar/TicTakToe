@@ -29,7 +29,9 @@ Example diagonal:
 [(0, 0, 0), (1, 1, 1), (2, 2, 2)]
 ```
 
-Outcomes: **Win**, **Draw**, or **Ongoing**.
+Outcomes: **Win** or **Ongoing**.
+
+> Note: In a 3×3×3 standard play, a complete board without a winner (a true draw) is effectively impossible due to the game's win-line density; therefore the application treats outcomes as either a win for a player or ongoing.
 
 ---
 
@@ -46,7 +48,7 @@ interface GameState {
   id: string;
   board: string[][][];
   currentPlayer: 'X' | 'O';
-  winner?: 'X' | 'O' | 'Draw';
+  winner?: 'X' | 'O';
 }
 ```
 - State stored in memory (or JSON store).
@@ -74,7 +76,7 @@ interface GameState {
 ## 🖥️ Frontend Requirements
 - Show 3 stacked 3x3 grids labeled **Layer 1-3**.
 - Active player only can click cells.
-- Display current player, game ID, and status (turn/win/draw).
+- Display current player, game ID, and status (turn/win).
 - **Submit** button locks move; disable board until next turn.
 - UI feedback:
   - Highlight selected cell
@@ -107,14 +109,15 @@ tictactoe-3d/
 
 ## 🧪 Testing Requirements
 ### Backend
-- **Game logic:** test all 49 win lines, tie, ongoing.
+- **Game logic:** test all 49 win lines and ongoing scenarios.
 - **API:** validate request/response, invalid actions.
 - **WebSocket:** join/leave, disconnect, broadcast.
 - Use **Jest**, organized under `__tests__`, with mocks.
 
 ### Frontend
-- **Unit tests:** components, hooks, state (React Testing Library + Jest).
-- **Integration/UI:** flows for create, join, move, win/draw (Cypress).
+- **Unit tests:** components, hooks, state (React Testing Library + Jest). 
+  - Example: `frontend/src/__tests__/App.test.tsx` created to exercise basic flows.
+- **Integration/UI:** flows for create, join, move, win (Cypress).
 - **Visual/accessibility:** snapshots + ARIA roles.
 - Enforce ≥80% coverage (checked in CI).
 
