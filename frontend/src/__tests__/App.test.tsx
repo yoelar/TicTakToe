@@ -3,19 +3,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from '../App';
 
-//global.fetch = jest.fn(() => Promise.resolve({ json: () => Promise.resolve({ gameId: 'test' }), ok: true })) as any;
-
-//describe('Frontend App', () => {
-// test('renders create game button and interacts', async () => {
-// render(<App />);
-// expect(screen.getByText('Create Game')).toBeInTheDocument();
-
-// fireEvent.click(screen.getByText('Create Game'));
-// await waitFor(() => expect(screen.getByPlaceholderText('Game ID')).toHaveValue('test'));
-// });
-//});
-
-
 // Simple mock for WebSocket
 class MockWebSocket {
     url: string;
@@ -68,6 +55,31 @@ afterEach(() => {
     // @ts-ignore
     jest.clearAllMocks();
 });
+test('renders create game button and interacts', async () => {
+    render(<App />);
+    expect(screen.getByText('Create Game')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Create Game'));
+    await waitFor(() => expect(screen.getByPlaceholderText('Game ID')).toHaveValue('game-1'));
+});
+
+test('allows joining an existing game', async () => {
+    render(<App />);
+
+    // enter game id
+    const input = screen.getByPlaceholderText(/game id/i);
+    fireEvent.change(input, { target: { value: 'game-1' } });
+
+    // click join
+    const joinBtn = screen.getByText('Join Game');
+    fireEvent.click(joinBtn);
+
+    // wait for GameView to load
+    await waitFor(() => {
+        expect(screen.getByText('Refresh')).toBeInTheDocument();
+    });
+});
+
 
 test('renders layers and allows selecting and submitting a cell', async () => {
     render(<App />);
@@ -90,4 +102,26 @@ test('renders layers and allows selecting and submitting a cell', async () => {
     // after submit, the selected should be cleared and no error message
     await waitFor(() => expect(screen.queryByText(/No cell selected/i)).not.toBeInTheDocument());
 });
+
+test('shows error when clicking an occupied cell', async () => {
+    render(<App />);
+
+    // create new game
+    fireEvent.click(screen.getByText('Create Game'));
+
+    // wait for game to load
+    await waitFor(() => screen.getByText('Refresh'));
+
+    // click empty cell (0-0-0)
+    const cell = screen.getByRole('gridcell', { name: /cell 0-0-0/i });
+    fireEvent.click(cell);
+
+    // submit move (places X)
+    fireEvent.click(screen.getByText('Submit'));
+
+    await waitFor(() => {
+        expect(cell).toBeDisabled();
+    });
+});
+
 

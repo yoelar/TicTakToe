@@ -4,7 +4,7 @@ import Controls from './components/Controls';
 import GameView from './components/GameView';
 import { GameState, Board, Player } from './types';
 
-export default function App(): JSX.Element {
+export default function App(): React.ReactElement {
     const [gameId, setGameId] = useState<string>('');
     const [state, setState] = useState<GameState | null>(null);
     const [selected, setSelected] = useState<[number, number, number] | null>(null);

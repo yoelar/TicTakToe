@@ -16,7 +16,12 @@ export default function GameView({ state, selected, setSelected, setMessage, sub
         <div>
             <div>Game: {state.id}</div>
             <div>Current Turn: {state.currentPlayer}</div>
-            <div>Status: {state.winner ?? 'Ongoing'}</div>
+            <div>
+                {state.winner
+                    ? <>Winner: {state.winner}</>
+                    : <>Status: Ongoing</>
+                }
+            </div>
 
             <div className="layers">
                 {[0, 1, 2].map((z) => (
