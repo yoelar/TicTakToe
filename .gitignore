@@ -363,3 +363,11 @@ MigrationBackup/
 FodyWeavers.xsd
 /coverage/clover.xml
 /coverage/lcov.info
+/coverage/lcov-report/backend/src/game.ts.html
+/coverage/lcov-report/backend/src/index.html
+/coverage/lcov-report/backend/src/index.ts.html
+/coverage/lcov-report/frontend/src/App.tsx.html
+/coverage/lcov-report/frontend/src/index.html
+/coverage/lcov-report/frontend/src/main.tsx.html
+/coverage/lcov-report/index.html
+/package-lock.json
