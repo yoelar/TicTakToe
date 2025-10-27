@@ -9,49 +9,97 @@ interface GameViewProps {
     setMessage: (m: string | null) => void;
     submitMove: () => Promise<void> | void;
     createGame: () => Promise<void> | void;
-    setState:   (js: GameState) => void;
+    setState: (js: GameState) => void;
 }
 
-export default function GameView({ state, selected, setSelected, setMessage, submitMove, createGame, setState }: GameViewProps) {
-    return (
-        <><div>
-            <div>Game: {state.id}</div>
-        </div><div>
-                <div>
-                    {state.winner ? (
-                        <div>Winner: {state.winner}</div>
-                    ) : (<div>
-                        <div>Current Turn: {state.currentPlayer}</div>
-                        <div>Status: Ongoing</div></div>
-                    )}
-                </div>
-            </div><div className="layers">
-                {[0, 1, 2].map((z) => (
-                    <LayerGrid
-                        key={z}
-                        z={z}
-                        state={state}
-                        selected={selected}
-                        setSelected={setSelected}
-                        setMessage={setMessage} />
-                ))}
-            </div><div className="actions">
-                <button onClick={submitMove} disabled={!selected || !!state.winner}>
-                    Submit
-                </button>
-                <button onClick={() => fetch(`/api/game/${state.id}/state`)
-                    .then((r) => r.json())
-                    .then((m) => {
-                        setState(m as GameState); // update the board & winner
-                        console.log(JSON.stringify(m));
-                        setMessage(typeof m === 'string' ? m : JSON.stringify(m));
-                        //    setMessage(null);          // optionally clear old messages
-                    })}>
-                    Refresh
-                </button>
-                {state.winner && <button onClick={createGame}>Play Again</button>}
-            </div>
+// --- Header Component ---
+const GameHeader: React.FC<{ state: GameState }> = ({ state }) => (
+    <div className="header">
+        <div>Game: {state.id}</div>
+        {state.winner ? (
+            <div>Winner: {state.winner}</div>
+        ) : (
+            <>
+                <div>Current Turn: {state.currentPlayer}</div>
+                <div>Status: Ongoing</div>
             </>
+        )}
+    </div>
+);
+
+// --- Board Component ---
+const BoardLayers: React.FC<{
+    state: GameState;
+    selected: [number, number, number] | null;
+    setSelected: (s: [number, number, number] | null) => void;
+    setMessage: (m: string | null) => void;
+}> = ({ state, selected, setSelected, setMessage }) => (
+    <div className="layers">
+        {[0, 1, 2].map((z) => (
+            <LayerGrid
+                key={z}
+                z={z}
+                state={state}
+                selected={selected}
+                setSelected={setSelected}
+                setMessage={setMessage}
+            />
+        ))}
+    </div>
+);
+
+// --- Actions Component ---
+const GameActions: React.FC<{
+    state: GameState;
+    selected: [number, number, number] | null;
+    submitMove: () => Promise<void> | void;
+    createGame: () => Promise<void> | void;
+    setState: (js: GameState) => void;
+    setMessage: (m: string | null) => void;
+}> = ({ state, selected, submitMove, createGame, setState, setMessage }) => (
+    <div className="actions">
+        <button onClick={submitMove} disabled={!selected || !!state.winner}>
+            Submit
+        </button>
+
+        <button
+            onClick={async () => {
+                try {
+                    const res = await fetch(`/api/game/${state.id}/state`);
+                    const m = await res.json();
+                    setState(m as GameState);
+                    setMessage(typeof m === 'string' ? m : JSON.stringify(m));
+                } catch (err) {
+                    setMessage(`Error fetching game state: ${err}`);
+                }
+            }}
+        >
+            Refresh
+        </button>
+
+        {state.winner && <button onClick={createGame}>Play Again</button>}
+    </div>
+);
+
+// --- Main GameView Component ---
+export default function GameView(props: GameViewProps) {
+    return (
+        <div className="game-view">
+            <GameHeader state={props.state} />
+            <BoardLayers
+                state={props.state}
+                selected={props.selected}
+                setSelected={props.setSelected}
+                setMessage={props.setMessage}
+            />
+            <GameActions
+                state={props.state}
+                selected={props.selected}
+                submitMove={props.submitMove}
+                createGame={props.createGame}
+                setState={props.setState}
+                setMessage={props.setMessage}
+            />
+        </div>
     );
 }
-
