@@ -372,3 +372,9 @@ FodyWeavers.xsd
 /coverage/lcov-report/index.html
 /package-lock.json
 /coverage/lcov-report/frontend/src/components
+/dist/frontend/src/components/Controls.js
+/dist/frontend/src/components/GameView.js
+/dist/frontend/src/components/LayerGrid.js
+/dist/frontend/src/App.js
+/dist/frontend/src/types.js
+/dist/frontend/src/__tests__/App.test.js
