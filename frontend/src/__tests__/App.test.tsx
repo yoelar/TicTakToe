@@ -5,20 +5,27 @@ import App from '../App';
 
 // Simple mock for WebSocket
 class MockWebSocket {
+    static instances: MockWebSocket[] = [];
     url: string;
     onmessage: ((ev: { data: string }) => void) | null = null;
     onerror: (() => void) | null = null;
+
     constructor(url: string) {
         this.url = url;
-        // simulate an open socket that immediately sends a state
+        MockWebSocket.instances.push(this);
+
+        // initial empty board message
         setTimeout(() => {
             if (this.onmessage) {
-                const emptyBoard = Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => '')));
-                const state = { id: 'test', board: emptyBoard, currentPlayer: 'X' };
+                const emptyBoard = Array.from({ length: 3 }, () =>
+                    Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => ''))
+                );
+                const state = { id: 'test', board: emptyBoard, currentPlayer: 'O' };
                 this.onmessage({ data: JSON.stringify(state) });
             }
         }, 0);
     }
+
     close() { }
 }
 
@@ -123,5 +130,30 @@ test('shows error when clicking an occupied cell', async () => {
         expect(cell).toBeDisabled();
     });
 });
+
+test('displays winner and disables submit', async () => {
+    // mock backend to immediately return a winner
+    (global.fetch as jest.Mock).mockImplementation((input: RequestInfo) => {
+        const url = String(input);
+        if (url.endsWith('/state')) {
+            const board = Array.from({ length: 3 }, () =>
+                Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => ''))
+            );
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ id: 'game-1', board, currentPlayer: 'X', winner: 'X' })
+            });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ gameId: 'game-1' }) });
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByText('Create Game'));
+
+    await waitFor(() => screen.getByText('Winner: X'));
+    expect(screen.getByText('Winner: X')).toBeInTheDocument();
+    expect(screen.getByText('Submit')).toBeDisabled();
+});
+
 
 

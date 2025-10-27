@@ -9,21 +9,23 @@ interface GameViewProps {
     setMessage: (m: string | null) => void;
     submitMove: () => Promise<void> | void;
     createGame: () => Promise<void> | void;
+    setState:   (js: GameState) => void;
 }
 
-export default function GameView({ state, selected, setSelected, setMessage, submitMove, createGame }: GameViewProps) {
+export default function GameView({ state, selected, setSelected, setMessage, submitMove, createGame, setState }: GameViewProps) {
     return (
-        <div>
+        <><div>
             <div>Game: {state.id}</div>
-            <div>Current Turn: {state.currentPlayer}</div>
-            <div>
-                {state.winner
-                    ? <>Winner: {state.winner}</>
-                    : <>Status: Ongoing</>
-                }
-            </div>
-
-            <div className="layers">
+        </div><div>
+                <div>
+                    {state.winner ? (
+                        <div>Winner: {state.winner}</div>
+                    ) : (<div>
+                        <div>Current Turn: {state.currentPlayer}</div>
+                        <div>Status: Ongoing</div></div>
+                    )}
+                </div>
+            </div><div className="layers">
                 {[0, 1, 2].map((z) => (
                     <LayerGrid
                         key={z}
@@ -31,21 +33,25 @@ export default function GameView({ state, selected, setSelected, setMessage, sub
                         state={state}
                         selected={selected}
                         setSelected={setSelected}
-                        setMessage={setMessage}
-                    />
+                        setMessage={setMessage} />
                 ))}
-            </div>
-
-            <div className="actions">
+            </div><div className="actions">
                 <button onClick={submitMove} disabled={!selected || !!state.winner}>
                     Submit
                 </button>
-                <button onClick={() => fetch(`/api/game/${state.id}/state`).then((r) => r.json()).then((m) => setMessage(String(m)))}>
+                <button onClick={() => fetch(`/api/game/${state.id}/state`)
+                    .then((r) => r.json())
+                    .then((m) => {
+                        setState(m as GameState); // update the board & winner
+                        console.log(JSON.stringify(m));
+                        setMessage(typeof m === 'string' ? m : JSON.stringify(m));
+                        //    setMessage(null);          // optionally clear old messages
+                    })}>
                     Refresh
                 </button>
                 {state.winner && <button onClick={createGame}>Play Again</button>}
             </div>
-        </div>
+            </>
     );
 }
 

@@ -16,7 +16,18 @@ export default function App(): React.ReactElement {
     const connectWs = (id: string) => {
         ws?.close();
         const socket = new WebSocket(`ws://${location.host}/?gameId=${id}`);
-        socket.onmessage = (ev) => setState(JSON.parse(ev.data));
+        socket.onmessage = (ev) => {
+            const newState = JSON.parse(ev.data);
+            setState((prev) => ({
+                ...prev,
+                ...newState,
+                // preserve winner if server update doesn’t include one
+                winner:
+                    newState.winner !== undefined && newState.winner !== null
+                        ? newState.winner
+                        : prev?.winner ?? null,
+            }));
+        };
         socket.onerror = () => setMessage('WebSocket error');
         setWs(socket);
     };
@@ -98,6 +109,7 @@ export default function App(): React.ReactElement {
                     setMessage={setMessage}
                     submitMove={submitMove}
                     createGame={createGame}
+                    setState={setState} 
                 />
             )}
         </div>
