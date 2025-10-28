@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { act } from 'react';
 import '@testing-library/jest-dom';
 import App from '../App';
@@ -69,23 +70,25 @@ afterEach(() => {
     jest.clearAllMocks();
 });
 test('renders create game button and interacts', async () => {
+    const user = userEvent.setup();
     render(<App />);
     expect(screen.getByText('Create Game')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Create Game'));
+    await user.click(screen.getByText('Create Game'));
     await waitFor(() => expect(screen.getByPlaceholderText('Game ID')).toHaveValue('game-1'));
 });
 
 test('allows joining an existing game', async () => {
+    const user = userEvent.setup();
     render(<App />);
 
     // enter game id
     const input = screen.getByPlaceholderText(/game id/i);
-    fireEvent.change(input, { target: { value: 'game-1' } });
+    await user.type(input, 'game-1');
 
     // click join
     const joinBtn = screen.getByText('Join Game');
-    fireEvent.click(joinBtn);
+    await user.click(joinBtn);
 
     // wait for GameView to load
     await waitFor(() => {
@@ -95,42 +98,43 @@ test('allows joining an existing game', async () => {
 
 
 test('renders layers and allows selecting and submitting a cell', async () => {
+    const user = userEvent.setup();
     render(<App />);
 
     // create game
-    const createBtn = screen.getByText('Create Game');
-    fireEvent.click(createBtn);
+    await user.click(screen.getByText('Create Game'));
 
     // wait for Refresh button to appear from GameView (indicates state loaded)
     await waitFor(() => expect(screen.getByText('Refresh')).toBeInTheDocument());
 
     // find a cell in layer 1, top-left (0-0-0)
     const cell = screen.getByRole('gridcell', { name: /cell 0-0-0/i });
-    fireEvent.click(cell);
+    await user.click(cell);
 
     // Submit
     const submit = screen.getByText('Submit');
-    fireEvent.click(submit);
+    await user.click(submit);
 
     // after submit, the selected should be cleared and no error message
     await waitFor(() => expect(screen.queryByText(/No cell selected/i)).not.toBeInTheDocument());
 });
 
 test('shows error when clicking an occupied cell', async () => {
+    const user = userEvent.setup();
     render(<App />);
 
     // create new game
-    fireEvent.click(screen.getByText('Create Game'));
+    await user.click(screen.getByText('Create Game'));
 
     // wait for game to load
     await waitFor(() => screen.getByText('Refresh'));
 
     // click empty cell (0-0-0)
     const cell = screen.getByRole('gridcell', { name: /cell 0-0-0/i });
-    fireEvent.click(cell);
+    await user.click(cell);
 
     // submit move (places X)
-    fireEvent.click(screen.getByText('Submit'));
+    await user.click(screen.getByText('Submit'));
 
     await waitFor(() => {
         expect(cell).toBeDisabled();
@@ -142,8 +146,9 @@ test('places mark in correct cell after submit', async () => {
     const origFetch = global.fetch;
     MockWebSocket.instances = [];
 
+    const user = userEvent.setup();
     render(<App />);
-    fireEvent.click(screen.getByText('Create Game'));
+    await user.click(screen.getByText('Create Game'));
 
     // Wait for game to load and websocket to be created
     await waitFor(() => screen.getByText('Refresh'));
@@ -151,10 +156,20 @@ test('places mark in correct cell after submit', async () => {
 
     // Select cell 1-2-0 (middle row, right column, bottom layer)
     const cell = screen.getByRole('gridcell', { name: /cell 1-2-0/i });
-    fireEvent.click(cell);
+    await user.click(cell);
 
     // Submit the move
-    fireEvent.click(screen.getByText('Submit'));
+    await user.click(screen.getByText('Submit'));
+
+    // verify /move call body included correct coordinates/player
+    const calls = (global.fetch as jest.Mock).mock.calls;
+    const moveCall = calls.find((c: any[]) => String(c[0]).includes('/move'));
+    expect(moveCall).toBeDefined();
+    if (moveCall) {
+        const init = moveCall[1];
+        const body = JSON.parse(init.body as string);
+        expect(body).toMatchObject({ player: 'X', x: 1, y: 2, z: 0 });
+    }
 
     // Simulate WebSocket sending updated board state
     await act(async () => {
