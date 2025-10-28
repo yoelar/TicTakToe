@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import { act } from 'react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import App from '../App';
@@ -77,25 +78,25 @@ test('full game flow leads to X winning (space diagonal)', async () => {
   // server responds with X at 0-0-0 and currentPlayer O
   let board = makeEmptyBoard();
   board[0][0][0] = 'X'; // z=0,y=0,x=0
-  sendServerState(ws, board, 'O');
+  await act(async () => sendServerState(ws, board, 'O'));
   await waitFor(() => expect(screen.getByRole('gridcell', { name: /cell 0-0-0/i })).toHaveTextContent('X'));
 
   // 2) O at 0-1-0 (some other cell)
   // simulate opponent move delivered by server
   board[0][1][0] = 'O';
-  sendServerState(ws, board, 'X');
+  await act(async () => sendServerState(ws, board, 'X'));
   await waitFor(() => expect(screen.getByRole('gridcell', { name: /cell 0-1-0/i })).toHaveTextContent('O'));
 
   // 3) X at 1-1-1
   await user.click(screen.getByRole('gridcell', { name: /cell 1-1-1/i }));
   await user.click(screen.getByText('Submit'));
   board[1][1][1] = 'X';
-  sendServerState(ws, board, 'O');
+  await act(async () => sendServerState(ws, board, 'O'));
   await waitFor(() => expect(screen.getByRole('gridcell', { name: /cell 1-1-1/i })).toHaveTextContent('X'));
 
   // 4) O random
   board[0][2][0] = 'O';
-  sendServerState(ws, board, 'X');
+  await act(async () => sendServerState(ws, board, 'X'));
   await waitFor(() => expect(screen.getByRole('gridcell', { name: /cell 0-2-0/i })).toHaveTextContent('O'));
 
   // 5) X at 2-2-2 winning move
@@ -103,7 +104,7 @@ test('full game flow leads to X winning (space diagonal)', async () => {
   await user.click(screen.getByText('Submit'));
   board[2][2][2] = 'X';
   // server announces winner
-  sendServerState(ws, board, 'X', 'X');
+  await act(async () => sendServerState(ws, board, 'X', 'X'));
 
   // Winner UI appears
   await waitFor(() => expect(screen.getByText(/Winner: X/)).toBeInTheDocument());
