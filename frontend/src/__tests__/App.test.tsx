@@ -27,7 +27,7 @@ class MockWebSocket implements WebSocketHandler {
                 const emptyBoard = Array.from({ length: 3 }, () =>
                     Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => ''))
                 );
-                const state = { id: 'test', board: emptyBoard, currentPlayer: 'O' };
+                const state = { id: 'test', board: emptyBoard, currentPlayer: 'X' };
                 this.onmessage({ data: JSON.stringify(state) });
             }
         }, 0);
