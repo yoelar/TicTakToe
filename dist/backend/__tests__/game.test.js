@@ -19,4 +19,16 @@ describe('3D Tic-Tac-Toe game logic', () => {
         (0, game_1.makeMove)(game, { player: 'X', x: 2, y: 2, z: 2 });
         expect(game.winner).toBe('X');
     });
+    test('submit places the current player mark in the selected cell', () => {
+        const game = (0, game_1.createGame)('g3');
+        // initial currentPlayer should be X
+        expect(game.currentPlayer).toBe('X');
+        const move = { player: 'X', x: 1, y: 2, z: 0 };
+        const res = (0, game_1.makeMove)(game, move);
+        expect(res.success).toBe(true);
+        // the board must have the player's mark at the selected coordinates
+        expect(game.board[0][2][1]).toBe('X');
+        // and the current player should have switched to O
+        expect(game.currentPlayer).toBe('O');
+    });
 });
