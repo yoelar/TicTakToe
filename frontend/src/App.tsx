@@ -54,7 +54,7 @@ export default function App(): React.ReactElement {
 
     const submitMove = async () => {
         if (!selected || !state) return setMessage('No cell selected');
-        const [x, y, z] = selected;
+        const [z, y, x] = selected;
         const player: Player = state.currentPlayer;
         const prevState = state;
         const newBoard: Board = state.board.map((plane) => plane.map((row) => row.slice()));
@@ -67,8 +67,8 @@ export default function App(): React.ReactElement {
 
         const res = await fetch(`/api/game/${state.id}/move`, {
             method: 'POST',
+            body: JSON.stringify({ x: selected[0], y: selected[1], z: selected[2], player: player }),
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ player, x, y, z }),
         });
 
         if (!res.ok) {

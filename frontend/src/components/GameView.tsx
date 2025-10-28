@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import LayerGrid from './LayerGrid';
+import BoardLayers from './BoardLayers';
 import { GameState } from '../types';
 
 interface GameViewProps {
@@ -12,7 +12,6 @@ interface GameViewProps {
     setState: (js: GameState) => void;
 }
 
-// --- Header Component ---
 const GameHeader: React.FC<{ state: GameState }> = ({ state }) => (
     <div className="header">
         <div>Game: {state.id}</div>
@@ -27,28 +26,6 @@ const GameHeader: React.FC<{ state: GameState }> = ({ state }) => (
     </div>
 );
 
-// --- Board Component ---
-const BoardLayers: React.FC<{
-    state: GameState;
-    selected: [number, number, number] | null;
-    setSelected: (s: [number, number, number] | null) => void;
-    setMessage: (m: string | null) => void;
-}> = ({ state, selected, setSelected, setMessage }) => (
-    <div className="layers">
-        {[0, 1, 2].map((z) => (
-            <LayerGrid
-                key={z}
-                z={z}
-                state={state}
-                selected={selected}
-                setSelected={setSelected}
-                setMessage={setMessage}
-            />
-        ))}
-    </div>
-);
-
-// --- Actions Component ---
 const GameActions: React.FC<{
     state: GameState;
     selected: [number, number, number] | null;
@@ -81,7 +58,6 @@ const GameActions: React.FC<{
     </div>
 );
 
-// --- Main GameView Component ---
 export default function GameView(props: GameViewProps) {
     return (
         <div className="game-view">
