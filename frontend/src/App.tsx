@@ -182,7 +182,11 @@ export default function App(): React.ReactElement {
         } else {
             setMessage(null);
             const json = await res.json();
-            if (json.state && !ws) { // Use returned state if no WebSocket
+            // Use returned authoritative state from the server when available.
+            // Apply it regardless of WS presence to ensure UI reflects server-evaluated
+            // winner/currentPlayer immediately after a move. If a websocket broadcast
+            // arrives later it will be consistent with this state.
+            if (json.state) {
                 setState(json.state as GameState);
             }
         }
