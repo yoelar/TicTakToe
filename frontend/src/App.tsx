@@ -21,36 +21,51 @@ export default function App(): React.ReactElement {
         const connect = () => {
             if (isReconnecting) return;
             ws?.close();
-            const socket = new WebSocket(`ws://${location.host}/?gameId=${state.id}`);
-            
-            socket.onmessage = (ev) => {
-                const newState = JSON.parse(ev.data);
-                setState((prev) => ({
-                    ...prev,
-                    ...newState,
-                    winner: newState.winner !== undefined && newState.winner !== null
-                        ? newState.winner
-                        : prev?.winner ?? null,
-                }));
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            const primary = `${protocol}://${location.host}/?gameId=${state.id}`;
+            const fallback = `${protocol}://${location.hostname}:4000/?gameId=${state.id}`;
+            let triedFallback = false;
+            const makeSocket = (url: string) => {
+                const s = new WebSocket(url);
+                // if primary fails, try fallback once
+                s.onerror = () => {
+                    if (!triedFallback && url === primary) {
+                        triedFallback = true;
+                        try { s.close(); } catch (e) {}
+                        makeSocket(fallback);
+                    } else {
+                        setMessage('WebSocket error');
+                        s.close();
+                    }
+                };
+                attachHandlers(s);
+                setWs(s);
+            };
+            const attachHandlers = (socket: WebSocket) => {
+                socket.onmessage = (ev) => {
+                    const newState = JSON.parse(ev.data);
+                    setState((prev) => ({
+                        ...prev,
+                        ...newState,
+                        winner: newState.winner !== undefined && newState.winner !== null
+                            ? newState.winner
+                            : prev?.winner ?? null,
+                    }));
+                };
+
+                socket.onclose = () => {
+                    setWs(null);
+                    if (!isReconnecting) {
+                        isReconnecting = true;
+                        reconnectTimer = setTimeout(() => {
+                            isReconnecting = false;
+                            connect();
+                        }, 2000);
+                    }
+                };
             };
 
-            socket.onclose = () => {
-                setWs(null);
-                if (!isReconnecting) {
-                    isReconnecting = true;
-                    reconnectTimer = setTimeout(() => {
-                        isReconnecting = false;
-                        connect();
-                    }, 2000);
-                }
-            };
-
-            socket.onerror = () => {
-                setMessage('WebSocket error');
-                socket.close();
-            };
-
-            setWs(socket);
+            makeSocket(primary);
         };
 
         connect();
@@ -84,21 +99,40 @@ export default function App(): React.ReactElement {
 
     const connectWs = (id: string) => {
         ws?.close();
-        const socket = new WebSocket(`ws://${location.host}/?gameId=${id}`);
-        socket.onmessage = (ev) => {
-            const newState = JSON.parse(ev.data);
-            setState((prev) => ({
-                ...prev,
-                ...newState,
-                // preserve winner if server update doesn�t include one
-                winner:
-                    newState.winner !== undefined && newState.winner !== null
-                        ? newState.winner
-                        : prev?.winner ?? null,
-            }));
+        const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+        const primary = `${protocol}://${location.host}/?gameId=${id}`;
+        const fallback = `${protocol}://${location.hostname}:4000/?gameId=${id}`;
+        let triedFallback = false;
+
+        const makeSocket = (url: string) => {
+            const s = new WebSocket(url);
+            s.onerror = () => {
+                if (!triedFallback && url === primary) {
+                    triedFallback = true;
+                    try { s.close(); } catch (e) {}
+                    makeSocket(fallback);
+                } else {
+                    setMessage('WebSocket error');
+                    s.close();
+                }
+            };
+            s.onmessage = (ev) => {
+                const newState = JSON.parse(ev.data);
+                setState((prev) => ({
+                    ...prev,
+                    ...newState,
+                    // preserve winner if server update doesn�t include one
+                    winner:
+                        newState.winner !== undefined && newState.winner !== null
+                            ? newState.winner
+                            : prev?.winner ?? null,
+                }));
+            };
+            s.onclose = () => setWs(null);
+            setWs(s);
         };
-        socket.onerror = () => setMessage('WebSocket error');
-        setWs(socket);
+
+        makeSocket(primary);
     };
 
     const createGame = async () => {
@@ -123,7 +157,7 @@ export default function App(): React.ReactElement {
 
     const submitMove = async () => {
         if (!selected || !state) return setMessage('No cell selected');
-        const [z, y, x] = selected;
+        const [x, y, z] = selected;
         const player: Player = state.currentPlayer;
         const prevState = state;
         const newBoard: Board = state.board.map((plane) => plane.map((row) => row.slice()));
@@ -137,7 +171,7 @@ export default function App(): React.ReactElement {
 
         const res = await fetch(`/api/game/${state.id}/move`, {
             method: 'POST',
-            body: JSON.stringify({ x: selected[0], y: selected[1], z: selected[2], player: player }),
+            body: JSON.stringify({ x, y, z, player: player }),
             headers: { 'Content-Type': 'application/json' },
         });
 
