@@ -157,7 +157,7 @@ export function makeMove(
     move: Move
 ): { success: boolean; error?: string } {
     if (state.winner) return { success: false, error: 'Game already finished' };
-    //if (move.player !== state.currentPlayer) return { success: false, error: "Not this player's turn" };
+    if (move.player !== state.currentPlayer) return { success: false, error: "Not this player's turn" };
 
     const x = move.x; const y = move.y; const z = move.z;
     console.log(`Making move at (x=${x}, y=${y}, z=${z}) by player ${move.player}`);
