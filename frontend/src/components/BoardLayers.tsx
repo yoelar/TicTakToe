@@ -32,13 +32,16 @@ export default function BoardLayers({ state, selected, setSelected, setMessage }
                                     selected?.[2] === z;
 
                                 return (
-                                    <div
+                                    <button
                                         key={x}
+                                        role="gridcell"
+                                        aria-label={`cell ${x}-${y}-${z}`}
                                         className={`cell ${cell ? 'occupied' : ''} ${isSelected ? 'selected' : ''}`}
                                         onClick={() => handleCellClick(x, y, z)}
+                                        disabled={!!cell}
                                     >
                                         {cell}
-                                    </div>
+                                    </button>
                                 );
                             })}
                         </div>

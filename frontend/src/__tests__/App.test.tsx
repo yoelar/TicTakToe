@@ -1,14 +1,20 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act } from 'react-dom/test-utils';
 import '@testing-library/jest-dom';
 import App from '../App';
 
+interface WebSocketHandler {
+    onmessage?: ((ev: { data: string }) => void) | null;
+    onerror?: (() => void) | null;
+}
+
 // Simple mock for WebSocket
-class MockWebSocket {
+class MockWebSocket implements WebSocketHandler {
     static instances: MockWebSocket[] = [];
     url: string;
-    onmessage: ((ev: { data: string }) => void) | null = null;
-    onerror: (() => void) | null = null;
+    onmessage?: ((ev: { data: string }) => void) | null = null;
+    onerror?: (() => void) | null = null;
 
     constructor(url: string) {
         this.url = url;
@@ -128,6 +134,43 @@ test('shows error when clicking an occupied cell', async () => {
 
     await waitFor(() => {
         expect(cell).toBeDisabled();
+    });
+});
+
+test('places mark in correct cell after submit', async () => {
+    // Track the latest mock websocket instance
+    const origFetch = global.fetch;
+    MockWebSocket.instances = [];
+
+    render(<App />);
+    fireEvent.click(screen.getByText('Create Game'));
+
+    // Wait for game to load and websocket to be created
+    await waitFor(() => screen.getByText('Refresh'));
+    expect(MockWebSocket.instances.length).toBeGreaterThan(0);
+
+    // Select cell 1-2-0 (middle row, right column, bottom layer)
+    const cell = screen.getByRole('gridcell', { name: /cell 1-2-0/i });
+    fireEvent.click(cell);
+
+    // Submit the move
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Simulate WebSocket sending updated board state
+    await act(async () => {
+        const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+        const board = Array.from({ length: 3 }, () =>
+            Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => ''))
+        );
+        board[0][2][1] = 'X'; // Place X at 1-2-0
+        const state = { id: 'test', board, currentPlayer: 'O' };
+        ws.onmessage?.({ data: JSON.stringify(state) });
+    });
+
+    // Verify X appears in the selected cell
+    await waitFor(() => {
+        const updatedCell = screen.getByRole('gridcell', { name: /cell 1-2-0/i });
+        expect(updatedCell).toHaveTextContent('X');
     });
 });
 
