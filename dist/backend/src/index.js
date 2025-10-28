@@ -47,7 +47,7 @@ exports.app.post('/api/game/:id/move', (req, res) => {
         }
         catch (e) { /* ignore */ }
     });
-    res.json({ success: true });
+    res.json({ success: true, state: game });
 });
 exports.app.get('/api/game/:id/state', (req, res) => {
     const { id } = req.params;

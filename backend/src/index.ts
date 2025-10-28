@@ -41,7 +41,7 @@ app.post('/api/game/:id/move', (req, res) => {
   set.forEach((s) => {
     try { s.send(payload); } catch (e) { /* ignore */ }
   });
-  res.json({ success: true });
+  res.json({ success: true, state: game });
 });
 
 app.get('/api/game/:id/state', (req, res) => {

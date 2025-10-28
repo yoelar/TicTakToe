@@ -11,7 +11,76 @@ export default function App(): React.ReactElement {
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [message, setMessage] = useState<string | null>(null);
 
-    useEffect(() => () => { ws?.close(); }, [ws]);
+    // WebSocket connection and reconnection logic
+    useEffect(() => {
+        if (!state?.id) return;
+        
+        let reconnectTimer: ReturnType<typeof setTimeout>;
+        let isReconnecting = false;
+
+        const connect = () => {
+            if (isReconnecting) return;
+            ws?.close();
+            const socket = new WebSocket(`ws://${location.host}/?gameId=${state.id}`);
+            
+            socket.onmessage = (ev) => {
+                const newState = JSON.parse(ev.data);
+                setState((prev) => ({
+                    ...prev,
+                    ...newState,
+                    winner: newState.winner !== undefined && newState.winner !== null
+                        ? newState.winner
+                        : prev?.winner ?? null,
+                }));
+            };
+
+            socket.onclose = () => {
+                setWs(null);
+                if (!isReconnecting) {
+                    isReconnecting = true;
+                    reconnectTimer = setTimeout(() => {
+                        isReconnecting = false;
+                        connect();
+                    }, 2000);
+                }
+            };
+
+            socket.onerror = () => {
+                setMessage('WebSocket error');
+                socket.close();
+            };
+
+            setWs(socket);
+        };
+
+        connect();
+
+        return () => {
+            clearTimeout(reconnectTimer);
+            ws?.close();
+        };
+    }, [state?.id]);
+
+    // Poll fallback: if WebSocket isn't available, periodically refresh state
+    useEffect(() => {
+        if (!state || !state.id) return;
+        if (ws) return; // websocket connected
+        let cancelled = false;
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/game/${state.id}/state`);
+                if (!res.ok) return;
+                const js = await res.json();
+                if (!cancelled) setState(js as GameState);
+            } catch (e) {
+                // ignore polling errors
+            }
+        }, 2000);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [state, ws]);
 
     const connectWs = (id: string) => {
         ws?.close();
@@ -21,7 +90,7 @@ export default function App(): React.ReactElement {
             setState((prev) => ({
                 ...prev,
                 ...newState,
-                // preserve winner if server update doesn’t include one
+                // preserve winner if server update doesnï¿½t include one
                 winner:
                     newState.winner !== undefined && newState.winner !== null
                         ? newState.winner
@@ -58,7 +127,8 @@ export default function App(): React.ReactElement {
         const player: Player = state.currentPlayer;
         const prevState = state;
         const newBoard: Board = state.board.map((plane) => plane.map((row) => row.slice()));
-        newBoard[x][y][z] = player;
+        // board is [z][y][x]
+        newBoard[z][y][x] = player;
         setState({
             ...state,
             board: newBoard,
@@ -77,6 +147,10 @@ export default function App(): React.ReactElement {
             setState(prevState); // rollback
         } else {
             setMessage(null);
+            const json = await res.json();
+            if (json.state && !ws) { // Use returned state if no WebSocket
+                setState(json.state as GameState);
+            }
         }
         setSelected(null);
     };

@@ -13,6 +13,11 @@ Structure:
 
 Notes:
 - This is a starting point matching the specification's logic and APIs.
+- Real-time updates:
+  - Uses WebSocket for live game state updates (moves, winner).
+  - Auto-reconnects if WebSocket connection is lost.
+  - Falls back to polling every 2s if WebSocket unavailable.
+  - Optimistic UI updates: moves appear instantly, then sync with server.
 - To run locally:
   1. Install Node.js 18+.
   2. Run `npm ci` to install dependencies.
