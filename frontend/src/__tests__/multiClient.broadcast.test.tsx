@@ -6,24 +6,10 @@ import '@testing-library/jest-dom';
 import App from '../App';
 
 // Mock WebSocket that records instances so tests can simulate server broadcasts
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  url: string;
-  onmessage?: ((ev: { data: string }) => void) | null = null;
-  onclose?: (() => void) | null = null;
-  onerror?: (() => void) | null = null;
-  constructor(url: string) {
-    this.url = url;
-    MockWebSocket.instances.push(this);
-    // no automatic messages; tests will call onmessage
-  }
-  close() {}
-}
+import { installMockWebSocket, MockWebSocket, makeEmptyBoard, sendServerStateToAll } from './testUtils';
 
 beforeEach(() => {
-  // @ts-ignore
-  global.WebSocket = MockWebSocket;
-  MockWebSocket.instances = [];
+  installMockWebSocket();
 
   // @ts-ignore
   global.fetch = jest.fn((input: RequestInfo, init?: RequestInit) => {
@@ -51,16 +37,6 @@ afterEach(() => {
   // @ts-ignore
   jest.clearAllMocks();
 });
-
-function makeEmptyBoard() {
-  return Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => '')));
-}
-
-function sendServerStateToAll(board: string[][][], currentPlayer: 'X'|'O', winner?: 'X'|'O'|'Draw') {
-  const state: any = { id: 'multi-1', board, currentPlayer };
-  if (winner) state.winner = winner;
-  MockWebSocket.instances.forEach((ws) => ws.onmessage && ws.onmessage({ data: JSON.stringify(state) }));
-}
 
 test('two clients receive broadcasts so moves and winner appear without refresh', async () => {
   const user = userEvent.setup();
@@ -94,7 +70,7 @@ test('two clients receive broadcasts so moves and winner appear without refresh'
   // Server broadcasts the new board to all clients
   let board = makeEmptyBoard();
   board[0][0][0] = 'X';
-  await act(async () => sendServerStateToAll(board, 'O'));
+  await act(async () => sendServerStateToAll(board, 'O', undefined, 'multi-1'));
 
   // Client2 should display the X without pressing Refresh
   await waitFor(() => expect(within(a2.container).getByRole('gridcell', { name: /cell 0-0-0/i })).toHaveTextContent('X'));
@@ -102,7 +78,7 @@ test('two clients receive broadcasts so moves and winner appear without refresh'
   // Now simulate further moves and a winning broadcast
   board[1][1][1] = 'X';
   board[2][2][2] = 'X';
-  await act(async () => sendServerStateToAll(board, 'X', 'X'));
+  await act(async () => sendServerStateToAll(board, 'X', 'X', 'multi-1'));
 
   // Both clients should show Winner and have Submit disabled
   await waitFor(() => expect(within(a1.container).getByText(/Winner: X/)).toBeInTheDocument());

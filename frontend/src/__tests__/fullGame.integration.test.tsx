@@ -5,22 +5,10 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import App from '../App';
 
-// Minimal MockWebSocket copied from App.test to control server messages
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  url: string;
-  onmessage?: ((ev: { data: string }) => void) | null = null;
-  onerror?: (() => void) | null = null;
-  constructor(url: string) {
-    this.url = url;
-    MockWebSocket.instances.push(this);
-  }
-  close() {}
-}
+import { installMockWebSocket, MockWebSocket, makeEmptyBoard, sendServerStateToAll } from './testUtils';
 
 beforeAll(() => {
-  // @ts-ignore
-  global.WebSocket = MockWebSocket;
+  installMockWebSocket();
 });
 
 beforeEach(() => {
@@ -48,16 +36,7 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-// Helper to send server state via websocket
-function sendServerState(ws: MockWebSocket, board: string[][][], currentPlayer: 'X' | 'O', winner?: 'X' | 'O' | 'Draw') {
-  const state: any = { id: 'game-1', board, currentPlayer };
-  if (winner) state.winner = winner;
-  ws.onmessage?.({ data: JSON.stringify(state) });
-}
-
-function makeEmptyBoard() {
-  return Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => '')));
-}
+// reuse helpers from testUtils
 
 test('full game flow leads to X winning (space diagonal)', async () => {
   render(<App />);
@@ -78,25 +57,25 @@ test('full game flow leads to X winning (space diagonal)', async () => {
   // server responds with X at 0-0-0 and currentPlayer O
   let board = makeEmptyBoard();
   board[0][0][0] = 'X'; // z=0,y=0,x=0
-  await act(async () => sendServerState(ws, board, 'O'));
+  await act(async () => sendServerStateToAll(board, 'O'));
   await waitFor(() => expect(screen.getByRole('gridcell', { name: /cell 0-0-0/i })).toHaveTextContent('X'));
 
   // 2) O at 0-1-0 (some other cell)
   // simulate opponent move delivered by server
   board[0][1][0] = 'O';
-  await act(async () => sendServerState(ws, board, 'X'));
+  await act(async () => sendServerStateToAll(board, 'X'));
   await waitFor(() => expect(screen.getByRole('gridcell', { name: /cell 0-1-0/i })).toHaveTextContent('O'));
 
   // 3) X at 1-1-1
   await user.click(screen.getByRole('gridcell', { name: /cell 1-1-1/i }));
   await user.click(screen.getByText('Submit'));
   board[1][1][1] = 'X';
-  await act(async () => sendServerState(ws, board, 'O'));
+  await act(async () => sendServerStateToAll(board, 'O'));
   await waitFor(() => expect(screen.getByRole('gridcell', { name: /cell 1-1-1/i })).toHaveTextContent('X'));
 
   // 4) O random
   board[0][2][0] = 'O';
-  await act(async () => sendServerState(ws, board, 'X'));
+  await act(async () => sendServerStateToAll(board, 'X'));
   await waitFor(() => expect(screen.getByRole('gridcell', { name: /cell 0-2-0/i })).toHaveTextContent('O'));
 
   // 5) X at 2-2-2 winning move
@@ -104,7 +83,7 @@ test('full game flow leads to X winning (space diagonal)', async () => {
   await user.click(screen.getByText('Submit'));
   board[2][2][2] = 'X';
   // server announces winner
-  await act(async () => sendServerState(ws, board, 'X', 'X'));
+  await act(async () => sendServerStateToAll(board, 'X', 'X'));
 
   // Winner UI appears
   await waitFor(() => expect(screen.getByText(/Winner: X/)).toBeInTheDocument());

@@ -5,41 +5,11 @@ import { act } from 'react';
 import '@testing-library/jest-dom';
 import App from '../App';
 
-interface WebSocketHandler {
-    onmessage?: ((ev: { data: string }) => void) | null;
-    onerror?: (() => void) | null;
-}
-
-// Simple mock for WebSocket
-class MockWebSocket implements WebSocketHandler {
-    static instances: MockWebSocket[] = [];
-    url: string;
-    onmessage?: ((ev: { data: string }) => void) | null = null;
-    onerror?: (() => void) | null = null;
-
-    constructor(url: string) {
-        this.url = url;
-        MockWebSocket.instances.push(this);
-
-        // initial empty board message
-        setTimeout(() => {
-            if (this.onmessage) {
-                const emptyBoard = Array.from({ length: 3 }, () =>
-                    Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => ''))
-                );
-                const state = { id: 'test', board: emptyBoard, currentPlayer: 'X' };
-                this.onmessage({ data: JSON.stringify(state) });
-            }
-        }, 0);
-    }
-
-    close() { }
-}
+import { installMockWebSocket, MockWebSocket } from './testUtils';
 
 // patch global WebSocket and fetch
 beforeAll(() => {
-    // @ts-ignore
-    global.WebSocket = MockWebSocket;
+    installMockWebSocket();
 });
 
 beforeEach(() => {
