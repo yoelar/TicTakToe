@@ -387,3 +387,9 @@ FodyWeavers.xsd
 /dist/frontend/src/__tests__/moveResponse.test.js
 /dist/frontend/src/__tests__/multiClient.broadcast.test.js
 /dist/frontend/src/__tests__/testUtils.js
+/dist/frontend/src/__tests__/playerLeave.test.js
+/dist/backend/__tests__/joinLeave.test.js
+/dist/backend/src/index.js
+/coverage/lcov-report/frontend/src/__tests__/index.html
+/coverage/lcov-report/frontend/src/__tests__/testUtils.ts.html
+/dist/backend/src/types.js
