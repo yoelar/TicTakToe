@@ -171,6 +171,22 @@ export default function App(): React.ReactElement {
     };
 
     const createGame = async () => {
+        // Ensure any existing websocket is closed before creating a new game so
+        // the server receives the close and can update connected player state.
+        await new Promise<void>((resolve) => {
+            try {
+                if (!ws) return resolve();
+                const onclose = () => resolve();
+                // attach temporary close handler if none exists
+                const prev = ws.onclose;
+                ws.onclose = () => {
+                    try { if (prev) (prev as any).call(ws); } catch (e) {}
+                    onclose();
+                };
+                try { ws.close(); } catch (e) { resolve(); }
+            } catch (e) { resolve(); }
+        });
+
         const res = await fetch('/api/game', { method: 'POST' });
         const data = await res.json();
         setGameId(data.gameId);
@@ -182,6 +198,21 @@ export default function App(): React.ReactElement {
 
     const joinGame = async () => {
         if (!gameId) return setMessage('Enter game ID');
+        // Close any existing websocket first so server will update other clients
+        // that this client has left the previous game.
+        await new Promise<void>((resolve) => {
+            try {
+                if (!ws) return resolve();
+                const onclose = () => resolve();
+                const prev = ws.onclose;
+                ws.onclose = () => {
+                    try { if (prev) (prev as any).call(ws); } catch (e) {}
+                    onclose();
+                };
+                try { ws.close(); } catch (e) { resolve(); }
+            } catch (e) { resolve(); }
+        });
+
         const joinRes = await fetch(`/api/game/${gameId}/join`, { method: 'POST' });
         if (!joinRes.ok) {
             const err = await joinRes.json().catch(() => null);

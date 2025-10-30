@@ -8,7 +8,19 @@ export class MockWebSocket {
     this.url = url;
     MockWebSocket.instances.push(this);
   }
-  close() {}
+  close() {
+    // Simulate closing the socket: call onclose and remove from instances so tests
+    // behave more like a real WebSocket where closed sockets no longer receive messages.
+    try {
+      if (this.onclose) this.onclose();
+    } catch (e) {
+      // ignore
+    }
+    // Note: do not remove from instances array; tests rely on historical instances
+    // being available for inspection. Closed sockets will have had their onclose
+    // invoked and should not receive further messages if test code avoids calling
+    // their onmessage handlers.
+  }
 }
 
 export function installMockWebSocket() {
