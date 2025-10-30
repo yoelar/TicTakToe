@@ -182,26 +182,38 @@ export default function App(): React.ReactElement {
     };
 
     const createGame = async () => {
+        const oldGameId = state?.id;
+        
         // Clear current game state first to avoid reconnection attempts
         setState(null);
         setAssignedPlayer(null);
         setPlayersConnected(0);
         
-        // Ensure any existing websocket is closed before creating a new game so
-        // the server receives the close and can update connected player state.
-        await new Promise<void>((resolve) => {
-            try {
-                if (!ws) return resolve();
-                const onclose = () => resolve();
-                // attach temporary close handler if none exists
-                const prev = ws.onclose;
-                ws.onclose = () => {
-                    try { if (prev) (prev as any).call(ws); } catch (e) {}
-                    onclose();
-                };
-                try { ws.close(); } catch (e) { resolve(); }
-            } catch (e) { resolve(); }
-        });
+        // Ensure any existing websocket is closed before creating a new game
+        if (ws) {
+            // Keep a reference to send a final message
+            const socket = ws;
+            // Ensure onclose handles cleanup before we create new game
+            await new Promise<void>((resolve) => {
+                try {
+                    const onclose = () => resolve();
+                    // attach temporary close handler if none exists
+                    const prev = socket.onclose;
+                    socket.onclose = () => {
+                        try { if (prev) (prev as any).call(socket); } catch (e) {}
+                        onclose();
+                    };
+                    // Tell server we're leaving before closing
+                    if (oldGameId) {
+                        try { 
+                            socket.send(JSON.stringify({ type: 'leave', gameId: oldGameId })); 
+                        } catch (e) {}
+                    }
+                    try { socket.close(1000, 'Leaving game'); } catch (e) { resolve(); }
+                } catch (e) { resolve(); }
+            });
+            setWs(null);
+        }
 
         const res = await fetch('/api/game', { method: 'POST' });
         const data = await res.json();

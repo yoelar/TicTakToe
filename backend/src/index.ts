@@ -216,6 +216,36 @@ if (wss) {
     }
   } catch (e) {}
 
+  // Handle messages from client
+  try {
+    const onMessage = (data: any) => {
+      try {
+        const message = JSON.parse(data);
+        if (message.type === 'leave') {
+          // Immediately process leave message before socket closes
+          const slot = players.find((p) => p.ws === ws);
+          if (slot) {
+            slot.ws = undefined;
+            slot.connected = false;
+            slot.clientId = undefined;
+            // notify remaining sockets immediately
+            const notif = JSON.stringify({ type: 'notification', message: `Player ${slot.player} left` });
+            set.forEach((s) => { if (s !== ws) try { s.send(notif); } catch (e) {} });
+            // broadcast updated players list
+            const playersPayload = JSON.stringify({ type: 'players', players: players.map(p => ({ player: p.player, connected: p.connected })) });
+            set.forEach((s) => { if (s !== ws) try { s.send(playersPayload); } catch (e) {} });
+          }
+        }
+      } catch (e) {}
+    };
+    // Attempt both APIs depending on environment
+    try {
+      (ws as any).on('message', onMessage);
+    } catch (e) {
+      try { ws.addEventListener('message', (e: any) => onMessage(e.data)); } catch (e) {}
+    }
+  } catch (e) {}
+
   // ws in this environment is the ws returned by the 'ws' package which uses
   // the EventEmitter API. It exposes 'on' in Node runtime, but for typings we
   // can also listen with 'close' event via addEventListener in browser-like mocks.
