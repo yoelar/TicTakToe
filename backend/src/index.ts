@@ -41,7 +41,68 @@ export const playersByGame: Record<
 > = {};
 
 // Track client ID to game ID mapping to detect clients joining multiple games
-const clientGameMap: Record<string, string> = {};
+export const clientGameMap: Record<string, string> = {};
+
+// Helper function to clean up player's previous game connection
+function cleanupPreviousGame(clientId: string, currentGameId: string) {
+  // First find which game this client is in, if any
+  Object.entries(playersByGame).forEach(([gameId, players]) => {
+    if (gameId === currentGameId) return; // Skip current game
+    
+    const slot = players.find(p => p.clientId === clientId);
+    if (slot && slot.connected) {
+      const player = slot.player; // Save for notifications
+      const previousGame = socketsByGame[gameId];
+      
+      // Mark disconnected before sending any updates
+      slot.connected = false;
+
+      if (previousGame) {
+        // Send notifications before socket cleanup
+        const notifyPayload = JSON.stringify({
+          type: 'notification',
+          message: `Player ${player} left`,
+        });
+
+        // Send updated player list showing slot as disconnected
+        const playersPayload = JSON.stringify({
+          type: 'players',
+          players: players.map(p => ({ 
+            player: p.player, 
+            connected: p.connected 
+          })),
+        });
+        
+        // Send to all sockets in the game
+        previousGame.forEach(socket => {
+          try {
+            socket.send(notifyPayload);
+            socket.send(playersPayload);
+          } catch (e) {}
+        });
+
+        // Clean up client's socket
+        const clientSocket = Array.from(previousGame)
+          .find(socket => socket.clientId === clientId);
+        if (clientSocket) {
+          try { clientSocket.close(); } catch (e) {}
+          previousGame.delete(clientSocket);
+        }
+      }
+
+      // Clean up slot and game mapping
+      slot.ws = undefined;
+      slot.clientId = undefined;
+      delete clientGameMap[clientId];
+    }
+  });
+
+  // Set new game mapping
+  clientGameMap[clientId] = currentGameId;
+
+  // Set current game mapping
+  clientGameMap[clientId] = currentGameId;
+}
 
 app.post('/api/game', (req, res) => {
   const id = uuidv4();
@@ -50,13 +111,27 @@ app.post('/api/game', (req, res) => {
   games[id] = game;
   socketsByGame[id] = new Set();
   playersByGame[id] = [];
+  
+  // If client ID is provided, clean up their previous game before creating new one
+  const clientId = req.query.clientId as string | undefined;
+  if (clientId) {
+    cleanupPreviousGame(clientId, id);
+  }
+  
   res.json({ gameId: id });
 });
 
 app.post('/api/game/:id/join', (req, res) => {
   const { id } = req.params;
+  const clientId = req.query.clientId as string | undefined;
+  
   const game = games[id];
   if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  // Clean up previous game if client is joining a new one
+  if (clientId) {
+    cleanupPreviousGame(clientId, id);
+  }
   const players = playersByGame[id] || [];
   // Count connected players
   const connectedCount = players.filter((p) => p.connected).length;
@@ -233,6 +308,10 @@ if (wss) {
           if (slot) {
             slot.ws = undefined;
             slot.connected = false;
+            // Clear client game mapping
+            if (slot.clientId) {
+              delete clientGameMap[slot.clientId];
+            }
             slot.clientId = undefined;
             // notify remaining sockets immediately
             const notif = JSON.stringify({ type: 'notification', message: `Player ${slot.player} left` });
@@ -266,6 +345,10 @@ if (wss) {
 
       slot.ws = undefined;
       slot.connected = false;
+      // Clear client game mapping when explicitly leaving
+      if (slot.clientId) {
+        delete clientGameMap[slot.clientId];
+      }
       slot.clientId = undefined;
       // notify remaining sockets
       const notif = JSON.stringify({ type: 'notification', message: `Player ${slot.player} left` });
