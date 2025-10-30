@@ -380,3 +380,10 @@ FodyWeavers.xsd
 /dist/frontend/src/__tests__/App.test.js
 /dist/backend/src/game.js
 /dist/frontend/src/components/BoardLayers.js
+/dist/frontend/src/components/__tests__/GameView.test.js
+/dist/frontend/src/__tests__/conflictingState.test.js
+/dist/frontend/src/__tests__/fullGame.integration.test.js
+/dist/frontend/src/__tests__/lateReconnect.test.js
+/dist/frontend/src/__tests__/moveResponse.test.js
+/dist/frontend/src/__tests__/multiClient.broadcast.test.js
+/dist/frontend/src/__tests__/testUtils.js
