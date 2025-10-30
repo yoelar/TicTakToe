@@ -10,6 +10,8 @@ export default function App(): React.ReactElement {
     const [selected, setSelected] = useState<[number, number, number] | null>(null);
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [message, setMessage] = useState<string | null>(null);
+    const [assignedPlayer, setAssignedPlayer] = useState<Player | null>(null);
+    const [playersConnected, setPlayersConnected] = useState<number>(0);
 
     // WebSocket connection and reconnection logic
     useEffect(() => {
@@ -43,14 +45,33 @@ export default function App(): React.ReactElement {
             };
             const attachHandlers = (socket: WebSocket) => {
                 socket.onmessage = (ev) => {
-                    const newState = JSON.parse(ev.data);
-                    setState((prev) => ({
-                        ...prev,
-                        ...newState,
-                        winner: newState.winner !== undefined && newState.winner !== null
-                            ? newState.winner
-                            : prev?.winner ?? null,
-                    }));
+                    try {
+                        const parsed = JSON.parse(ev.data);
+                        if (parsed && parsed.type) {
+                            // envelope messages
+                            if (parsed.type === 'assign') {
+                                setAssignedPlayer(parsed.player as Player);
+                            } else if (parsed.type === 'players') {
+                                const count = Array.isArray(parsed.players)
+                                    ? parsed.players.filter((p: any) => p.connected).length
+                                    : 0;
+                                setPlayersConnected(count);
+                            } else if (parsed.type === 'notification') {
+                                setMessage(parsed.message);
+                            }
+                        } else {
+                            const newState = parsed as GameState;
+                            setState((prev) => ({
+                                ...prev,
+                                ...newState,
+                                winner: newState.winner !== undefined && newState.winner !== null
+                                    ? newState.winner
+                                    : prev?.winner ?? undefined,
+                            }));
+                        }
+                    } catch (e) {
+                        // ignore non-JSON or unexpected messages
+                    }
                 };
 
                 socket.onclose = () => {
@@ -117,16 +138,30 @@ export default function App(): React.ReactElement {
                 }
             };
             s.onmessage = (ev) => {
-                const newState = JSON.parse(ev.data);
-                setState((prev) => ({
-                    ...prev,
-                    ...newState,
-                    // preserve winner if server update doesn�t include one
-                    winner:
-                        newState.winner !== undefined && newState.winner !== null
-                            ? newState.winner
-                            : prev?.winner ?? null,
-                }));
+                try {
+                    const parsed = JSON.parse(ev.data);
+                    if (parsed && parsed.type) {
+                        if (parsed.type === 'assign') setAssignedPlayer(parsed.player as Player);
+                        else if (parsed.type === 'players') {
+                            const count = Array.isArray(parsed.players)
+                                ? parsed.players.filter((p: any) => p.connected).length
+                                : 0;
+                            setPlayersConnected(count);
+                        } else if (parsed.type === 'notification') setMessage(parsed.message);
+                    } else {
+                        const newState = parsed as GameState;
+                        setState((prev) => ({
+                            ...prev,
+                            ...newState,
+                            winner:
+                                newState.winner !== undefined && newState.winner !== null
+                                    ? newState.winner
+                                    : prev?.winner ?? undefined,
+                        }));
+                    }
+                } catch (e) {
+                    // ignore
+                }
             };
             s.onclose = () => setWs(null);
             setWs(s);
@@ -148,7 +183,12 @@ export default function App(): React.ReactElement {
     const joinGame = async () => {
         if (!gameId) return setMessage('Enter game ID');
         const joinRes = await fetch(`/api/game/${gameId}/join`, { method: 'POST' });
-        if (!joinRes.ok) return setMessage('Game not found');
+        if (!joinRes.ok) {
+            const err = await joinRes.json().catch(() => null);
+            return setMessage(err?.error || 'Game not found or full');
+        }
+        const joinJson = await joinRes.json();
+        if (joinJson.player) setAssignedPlayer(joinJson.player as Player);
         const s = await fetch(`/api/game/${gameId}/state`);
         const js = await s.json();
         setState(js as GameState);
@@ -221,7 +261,9 @@ export default function App(): React.ReactElement {
                     setMessage={setMessage}
                     submitMove={submitMove}
                     createGame={createGame}
-                    setState={setState} 
+                    setState={setState}
+                    assignedPlayer={assignedPlayer}
+                    playersConnected={playersConnected}
                 />
             )}
         </div>

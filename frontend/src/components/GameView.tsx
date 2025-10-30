@@ -10,11 +10,19 @@ interface GameViewProps {
     submitMove: () => Promise<void> | void;
     createGame: () => Promise<void> | void;
     setState: (js: GameState) => void;
+    assignedPlayer?: 'X' | 'O' | null;
+    playersConnected?: number;
 }
 
-const GameHeader: React.FC<{ state: GameState }> = ({ state }) => (
+const GameHeader: React.FC<{ state: GameState; assignedPlayer?: 'X' | 'O' | null; playersConnected?: number }> = ({ state, assignedPlayer, playersConnected }) => (
     <div className="header">
         <div>Game: {state.id}</div>
+        {typeof assignedPlayer !== 'undefined' && (
+            <div>Your side: {assignedPlayer ?? 'unassigned'}</div>
+        )}
+        {typeof playersConnected !== 'undefined' && (
+            <div>Players connected: {playersConnected}</div>
+        )}
         {state.winner ? (
             <div>Winner: {state.winner}</div>
         ) : (
@@ -33,9 +41,11 @@ const GameActions: React.FC<{
     createGame: () => Promise<void> | void;
     setState: (js: GameState) => void;
     setMessage: (m: string | null) => void;
-}> = ({ state, selected, submitMove, createGame, setState, setMessage }) => (
+    assignedPlayer?: 'X' | 'O' | null;
+    playersConnected?: number;
+}> = ({ state, selected, submitMove, createGame, setState, setMessage, assignedPlayer, playersConnected }) => (
     <div className="actions">
-        <button onClick={submitMove} disabled={!selected || !!state.winner}>
+        <button onClick={submitMove} disabled={!selected || !!state.winner || (playersConnected === 2 && assignedPlayer !== state.currentPlayer)}>
             Submit
         </button>
 
@@ -61,7 +71,7 @@ const GameActions: React.FC<{
 export default function GameView(props: GameViewProps) {
     return (
         <div className="game-view">
-            <GameHeader state={props.state} />
+            <GameHeader state={props.state} assignedPlayer={props.assignedPlayer} playersConnected={props.playersConnected} />
             <BoardLayers
                 state={props.state}
                 selected={props.selected}
@@ -75,6 +85,8 @@ export default function GameView(props: GameViewProps) {
                 createGame={props.createGame}
                 setState={props.setState}
                 setMessage={props.setMessage}
+                assignedPlayer={props.assignedPlayer}
+                playersConnected={props.playersConnected}
             />
         </div>
     );

@@ -8,16 +8,43 @@ export const app = express();
 app.use(express.json());
 
 export const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+// Ensure we can handle different ws export shapes across environments (CJS/ESM)
+let WebSocketServerCtor: any = (WebSocketServer as any) || undefined;
+if (!WebSocketServerCtor) {
+  try {
+    // try require fallback
+    const wsReq = require('ws');
+    WebSocketServerCtor = wsReq.WebSocketServer || wsReq.Server || undefined;
+  } catch (e) {
+    WebSocketServerCtor = undefined;
+  }
+}
+
+let wss: any = undefined;
+if (typeof WebSocketServerCtor === 'function') {
+  wss = new WebSocketServerCtor({ server });
+} else {
+  // ws server unavailable in this environment (tests/mock). We'll still export server and allow
+  // HTTP endpoints to be exercised. WebSocket-related features will be no-ops.
+  wss = null as any;
+}
 
 export const games: Record<string, GameState> = {};
 export const socketsByGame: Record<string, Set<any>> = {};
+export type Player = 'X' | 'O';
+
+// Track player slots and their websocket (if connected) per game
+export const playersByGame: Record<
+  string,
+  Array<{ player: Player; ws?: any; connected: boolean }>
+> = {};
 
 app.post('/api/game', (req, res) => {
   const id = uuidv4();
   const game = createGame(id);
   games[id] = game;
   socketsByGame[id] = new Set();
+  playersByGame[id] = [];
   res.json({ gameId: id });
 });
 
@@ -25,7 +52,31 @@ app.post('/api/game/:id/join', (req, res) => {
   const { id } = req.params;
   const game = games[id];
   if (!game) return res.status(404).json({ error: 'Game not found' });
-  res.json({ success: true });
+  const players = playersByGame[id] || [];
+  // Count connected players
+  const connectedCount = players.filter((p) => p.connected).length;
+  if (connectedCount >= 2) return res.status(400).json({ error: 'Game full' });
+
+  // Determine assignment: if no players yet, first is X, second is O
+  let assignment: Player = 'X';
+  if (players.length === 0) assignment = 'X';
+  else if (players.length === 1) assignment = players[0].player === 'X' ? 'O' : 'X';
+  else {
+    // If there are reserved slots, find a disconnected slot
+    const free = players.find((p) => !p.connected);
+    assignment = free ? free.player : 'O';
+  }
+
+  // Reserve slot (ws will be attached when socket connects)
+  players.push({ player: assignment, ws: undefined, connected: false });
+  playersByGame[id] = players;
+
+  // notify existing connected sockets that someone reserved/joined
+  const set = socketsByGame[id] || new Set();
+  const payload = JSON.stringify({ type: 'players', players: players.map(p => ({ player: p.player, connected: p.connected })) });
+  set.forEach((s) => { try { s.send(payload); } catch (e) {} });
+
+  res.json({ success: true, player: assignment });
 });
 
 app.post('/api/game/:id/move', (req, res) => {
@@ -37,6 +88,7 @@ app.post('/api/game/:id/move', (req, res) => {
   if (!result.success) return res.status(400).json({ error: result.error });
   // broadcast
   const set = socketsByGame[id];
+  // Keep backwards-compat: send raw state object for state updates
   const payload = JSON.stringify(game);
   set.forEach((s) => {
     try { s.send(payload); } catch (e) { /* ignore */ }
@@ -51,16 +103,78 @@ app.get('/api/game/:id/state', (req, res) => {
   res.json(game);
 });
 
-wss.on('connection', (ws, req) => {
+if (wss) {
+  wss.on('connection', (ws: any, req: any) => {
   const url = req.url || '';
   const params = new URLSearchParams(url.replace(/^\/?\?/, ''));
   const gameId = params.get('gameId');
   if (!gameId) return ws.close();
   const set = socketsByGame[gameId];
   if (!set) return ws.close();
+
+  // Ensure players array exists for this game
+  if (!playersByGame[gameId]) playersByGame[gameId] = [];
+  const players = playersByGame[gameId];
+
+  // Assign this websocket to an existing reserved slot if any
+  let assignedSlot = players.find((p) => !p.connected && !p.ws);
+  if (assignedSlot) {
+    assignedSlot.ws = ws;
+    assignedSlot.connected = true;
+  } else if (players.length < 2) {
+    // Create a new slot
+    const assignment: Player = players.length === 0 ? 'X' : 'O';
+    assignedSlot = { player: assignment, ws, connected: true };
+    players.push(assignedSlot);
+  } else {
+    // If there's a disconnected slot (someone left), reuse it
+    const disconnected = players.find((p) => !p.connected);
+    if (disconnected) {
+      disconnected.ws = ws;
+      disconnected.connected = true;
+      assignedSlot = disconnected;
+    } else {
+      // Game full
+      try { ws.send(JSON.stringify({ type: 'reject', message: 'Game full' })); } catch (e) {}
+      try { ws.close(); } catch (e) {}
+      return;
+    }
+  }
+
   set.add(ws);
-  ws.on('close', () => set.delete(ws));
-});
+
+  // Inform this socket of its assignment
+  try { ws.send(JSON.stringify({ type: 'assign', player: assignedSlot.player })); } catch (e) {}
+
+  // Broadcast updated players list to all sockets
+  try {
+    const playersPayload = JSON.stringify({ type: 'players', players: players.map(p => ({ player: p.player, connected: p.connected })) });
+    set.forEach((s) => { try { s.send(playersPayload); } catch (e) {} });
+  } catch (e) {}
+
+  // Also notify others a player joined
+  try {
+    const notif = JSON.stringify({ type: 'notification', message: `Player ${assignedSlot.player} joined` });
+    set.forEach((s) => { if (s !== ws) try { s.send(notif); } catch (e) {} });
+  } catch (e) {}
+
+  ws.on('close', () => {
+    set.delete(ws);
+    // find assigned slot and mark disconnected
+    const slot = players.find((p) => p.ws === ws);
+    if (slot) {
+      slot.ws = undefined;
+      slot.connected = false;
+      // notify remaining sockets
+      const notif = JSON.stringify({ type: 'notification', message: `Player ${slot.player} left` });
+      set.forEach((s) => { try { s.send(notif); } catch (e) {} });
+      // broadcast updated players list
+      const playersPayload = JSON.stringify({ type: 'players', players: players.map(p => ({ player: p.player, connected: p.connected })) });
+      set.forEach((s) => { try { s.send(playersPayload); } catch (e) {} });
+    }
+  });
+  });
+}
 
 const PORT = process.env.PORT || 4000;
 if (require.main === module) {
