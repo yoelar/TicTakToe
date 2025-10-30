@@ -46,6 +46,7 @@ const clientGameMap: Record<string, string> = {};
 app.post('/api/game', (req, res) => {
   const id = uuidv4();
   const game = createGame(id);
+  console.log(`Creating game with ID: ${id}`);
   games[id] = game;
   socketsByGame[id] = new Set();
   playersByGame[id] = [];
@@ -61,8 +62,11 @@ app.post('/api/game/:id/join', (req, res) => {
   const connectedCount = players.filter((p) => p.connected).length;
   if (connectedCount >= 2) return res.status(400).json({ error: 'Game full' });
 
+  console.log(`Joining game ${id}, numplayers is ${players.length}`);
+
   // Determine assignment: if no players yet, first is X, second is O
   let assignment: Player = 'X';
+
   if (players.length === 0) assignment = 'X';
   else if (players.length === 1) assignment = players[0].player === 'X' ? 'O' : 'X';
   else {
@@ -221,9 +225,11 @@ if (wss) {
     const onMessage = (data: any) => {
       try {
         const message = JSON.parse(data);
-        if (message.type === 'leave') {
+          if (message.type === 'leave') {
           // Immediately process leave message before socket closes
           const slot = players.find((p) => p.ws === ws);
+          console.log(`${gameId} : Player ${slot?.clientId} leave requested`);
+
           if (slot) {
             slot.ws = undefined;
             slot.connected = false;
@@ -250,10 +256,14 @@ if (wss) {
   // the EventEmitter API. It exposes 'on' in Node runtime, but for typings we
   // can also listen with 'close' event via addEventListener in browser-like mocks.
   const onClose = () => {
+    console.log(`${gameId} : socket closed`);
     set.delete(ws as GameWebSocket);
     // find assigned slot and mark disconnected
     const slot = players.find((p) => p.ws === ws);
-    if (slot) {
+
+   if (slot) {
+      console.log(`${gameId} : player ${slot.clientId} left`);
+
       slot.ws = undefined;
       slot.connected = false;
       slot.clientId = undefined;

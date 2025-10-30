@@ -160,7 +160,7 @@ export function makeMove(
     if (move.player !== state.currentPlayer) return { success: false, error: "Not this player's turn" };
 
     const x = move.x; const y = move.y; const z = move.z;
-    console.log(`Making move at (x=${x}, y=${y}, z=${z}) by player ${move.player}`);
+    console.log(`${state.id}: Making move at (x=${x}, y=${y}, z=${z}) by player ${move.player}`);
     if (![0, 1, 2].includes(x) || ![0, 1, 2].includes(y) || ![0, 1, 2].includes(z)) {
         return { success: false, error: 'Invalid coordinates' };
     }
