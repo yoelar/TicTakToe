@@ -3,6 +3,7 @@ import http from 'http';
 import { WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { createGame, GameState, makeMove } from './game';
+import { GameWebSocket, WSQueryParams } from './types';
 
 export const app = express();
 app.use(express.json());
@@ -30,14 +31,17 @@ if (typeof WebSocketServerCtor === 'function') {
 }
 
 export const games: Record<string, GameState> = {};
-export const socketsByGame: Record<string, Set<any>> = {};
+export const socketsByGame: Record<string, Set<GameWebSocket>> = {};
 export type Player = 'X' | 'O';
 
 // Track player slots and their websocket (if connected) per game
 export const playersByGame: Record<
   string,
-  Array<{ player: Player; ws?: any; connected: boolean }>
+  Array<{ player: Player; ws?: GameWebSocket; connected: boolean; clientId?: string }>
 > = {};
+
+// Track client ID to game ID mapping to detect clients joining multiple games
+const clientGameMap: Record<string, string> = {};
 
 app.post('/api/game', (req, res) => {
   const id = uuidv4();
@@ -104,34 +108,86 @@ app.get('/api/game/:id/state', (req, res) => {
 });
 
 if (wss) {
-  wss.on('connection', (ws: any, req: any) => {
+  wss.on('connection', (ws: GameWebSocket, req: any) => {
   const url = req.url || '';
   const params = new URLSearchParams(url.replace(/^\/?\?/, ''));
-  const gameId = params.get('gameId');
+  const gameId = params.get('gameId') as string;
+  const clientId = params.get('clientId') || undefined;
   if (!gameId) return ws.close();
   const set = socketsByGame[gameId];
   if (!set) return ws.close();
+
+  // Store IDs on the socket instance for easy access
+  ws.gameId = gameId;
+  if (clientId) {
+    ws.clientId = clientId;
+    
+    // If this client was previously in a different game, force disconnect their socket
+    const previousGameId = clientGameMap[clientId];
+    if (previousGameId && previousGameId !== gameId) {
+      const previousGame = socketsByGame[previousGameId];
+      if (previousGame) {
+        // Find and disconnect client's old socket from previous game
+        for (const socket of previousGame) {
+          if (socket.clientId === clientId) {
+            try { socket.close(); } catch (e) {}
+            previousGame.delete(socket);
+            // Clean up player slot too
+            const players = playersByGame[previousGameId];
+            const slot = players?.find(p => p.clientId === clientId);
+            if (slot) {
+              slot.ws = undefined;
+              slot.connected = false;
+              slot.clientId = undefined;
+            }
+            // Notify remaining players in the previous game
+            const notif = JSON.stringify({
+              type: 'notification',
+              message: `Player ${slot?.player} left`,
+            });
+            previousGame.forEach(s => { try { s.send(notif); } catch (e) {} });
+            // Update players list for remaining clients
+            const playersPayload = JSON.stringify({
+              type: 'players',
+              players: players.map(p => ({ player: p.player, connected: p.connected })),
+            });
+            previousGame.forEach(s => { try { s.send(playersPayload); } catch (e) {} });
+            break;
+          }
+        }
+      }
+    }
+    // Update the client's current game mapping
+    clientGameMap[clientId] = gameId;
+  }
 
   // Ensure players array exists for this game
   if (!playersByGame[gameId]) playersByGame[gameId] = [];
   const players = playersByGame[gameId];
 
   // Assign this websocket to an existing reserved slot if any
-  let assignedSlot = players.find((p) => !p.connected && !p.ws);
+  // First try to find this client's existing slot
+  let assignedSlot = clientId ? players.find(p => p.clientId === clientId) : undefined;
+  if (!assignedSlot) {
+    // Then look for any available slot
+    assignedSlot = players.find((p) => !p.connected && !p.ws);
+  }
   if (assignedSlot) {
     assignedSlot.ws = ws;
     assignedSlot.connected = true;
+    if (clientId) assignedSlot.clientId = clientId;
   } else if (players.length < 2) {
     // Create a new slot
     const assignment: Player = players.length === 0 ? 'X' : 'O';
-    assignedSlot = { player: assignment, ws, connected: true };
-    players.push(assignedSlot);
+  assignedSlot = { player: assignment, ws, connected: true, clientId } as any;
+  players.push(assignedSlot!);
   } else {
     // If there's a disconnected slot (someone left), reuse it
     const disconnected = players.find((p) => !p.connected);
     if (disconnected) {
       disconnected.ws = ws;
       disconnected.connected = true;
+      if (clientId) disconnected.clientId = clientId;
       assignedSlot = disconnected;
     } else {
       // Game full
@@ -141,10 +197,10 @@ if (wss) {
     }
   }
 
-  set.add(ws);
+  set.add(ws as GameWebSocket);
 
   // Inform this socket of its assignment
-  try { ws.send(JSON.stringify({ type: 'assign', player: assignedSlot.player })); } catch (e) {}
+  try { if (assignedSlot) ws.send(JSON.stringify({ type: 'assign', player: assignedSlot.player })); } catch (e) {}
 
   // Broadcast updated players list to all sockets
   try {
@@ -154,17 +210,23 @@ if (wss) {
 
   // Also notify others a player joined
   try {
-    const notif = JSON.stringify({ type: 'notification', message: `Player ${assignedSlot.player} joined` });
-    set.forEach((s) => { if (s !== ws) try { s.send(notif); } catch (e) {} });
+    if (assignedSlot) {
+      const notif = JSON.stringify({ type: 'notification', message: `Player ${assignedSlot.player} joined` });
+      set.forEach((s) => { if (s !== ws) try { s.send(notif); } catch (e) {} });
+    }
   } catch (e) {}
 
-  ws.on('close', () => {
-    set.delete(ws);
+  // ws in this environment is the ws returned by the 'ws' package which uses
+  // the EventEmitter API. It exposes 'on' in Node runtime, but for typings we
+  // can also listen with 'close' event via addEventListener in browser-like mocks.
+  const onClose = () => {
+    set.delete(ws as GameWebSocket);
     // find assigned slot and mark disconnected
     const slot = players.find((p) => p.ws === ws);
     if (slot) {
       slot.ws = undefined;
       slot.connected = false;
+      slot.clientId = undefined;
       // notify remaining sockets
       const notif = JSON.stringify({ type: 'notification', message: `Player ${slot.player} left` });
       set.forEach((s) => { try { s.send(notif); } catch (e) {} });
@@ -172,7 +234,13 @@ if (wss) {
       const playersPayload = JSON.stringify({ type: 'players', players: players.map(p => ({ player: p.player, connected: p.connected })) });
       set.forEach((s) => { try { s.send(playersPayload); } catch (e) {} });
     }
-  });
+  };
+  // Attempt both APIs depending on environment
+  try {
+    (ws as any).on('close', onClose);
+  } catch (e) {
+    try { ws.addEventListener('close', onClose as any); } catch (e) {}
+  }
   });
 }
 
