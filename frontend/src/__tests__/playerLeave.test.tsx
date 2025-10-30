@@ -101,8 +101,12 @@ test('players connected count updates when player leaves by creating new game', 
   // Player 2 creates a new game (leaving the first game)
   await user.click(within(app2.container).getByText('Create Game'));
   
-  // Server notifies remaining client (app1) that a player left
+  // Server notifies remaining client (app1) that a player left and closes Player 2's socket
   await act(async () => {
+    // Simulate old socket being closed by server
+    MockWebSocket.instances[1].onclose?.();
+    
+    // Then server sends updated player list to remaining client
     MockWebSocket.instances[0].onmessage?.({ 
       data: JSON.stringify({ type: 'players', players: [{ player: 'X', connected: true }] })
     });

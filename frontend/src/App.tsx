@@ -76,11 +76,15 @@ export default function App(): React.ReactElement {
 
                 socket.onclose = () => {
                     setWs(null);
-                    if (!isReconnecting) {
+                    // Only try to reconnect if we still have the same game ID
+                    // (don't reconnect if we're switching games)
+                    if (!isReconnecting && state?.id) {
                         isReconnecting = true;
                         reconnectTimer = setTimeout(() => {
                             isReconnecting = false;
-                            connect();
+                            if (state?.id) { // double check game ID hasn't changed
+                                connect();
+                            }
                         }, 2000);
                     }
                 };
@@ -163,7 +167,14 @@ export default function App(): React.ReactElement {
                     // ignore
                 }
             };
-            s.onclose = () => setWs(null);
+            s.onclose = () => {
+                setWs(null);
+                // Reset player count if this was not a voluntary disconnect
+                // (voluntary disconnects will get player count updates from server)
+                if (state?.id === id) {
+                    setPlayersConnected(prev => Math.max(0, prev - 1));
+                }
+            };
             setWs(s);
         };
 
@@ -171,6 +182,11 @@ export default function App(): React.ReactElement {
     };
 
     const createGame = async () => {
+        // Clear current game state first to avoid reconnection attempts
+        setState(null);
+        setAssignedPlayer(null);
+        setPlayersConnected(0);
+        
         // Ensure any existing websocket is closed before creating a new game so
         // the server receives the close and can update connected player state.
         await new Promise<void>((resolve) => {
